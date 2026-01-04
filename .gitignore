@@ -6,3 +6,4 @@ bk/
 *.avi
 *.mp4
 __pycache__/
+gpt_examples/tts/
