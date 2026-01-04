@@ -1,0 +1,3 @@
+line_reference = [400, 400, 400]
+cliff_reference = [100, 100, 100]
+direction_servo_pin_offset = -7.6

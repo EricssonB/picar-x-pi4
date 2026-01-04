@@ -1,8 +1,8 @@
+#!/usr/bin/env python3
 from robot_hat import Pin, ADC, PWM, Servo, fileDB
 from robot_hat import Grayscale_Module, Ultrasonic, utils
 import time
 import os
-
 
 def constrain(x, min_val, max_val):
     '''
@@ -27,11 +27,6 @@ class Picarx(object):
     PRESCALER = 10
     TIMEOUT = 0.02
 
-    # servo_pins: camera_pan_servo, camera_tilt_servo, direction_servo
-    # motor_pins: left_swicth, right_swicth, left_pwm, right_pwm
-    # grayscale_pins: 3 adc channels
-    # ultrasonic_pins: trig, echo2
-    # config: path of config file
     def __init__(self, 
                 servo_pins:list=['P0', 'P1', 'P2'], 
                 motor_pins:list=['D4', 'D5', 'P13', 'P12'],
@@ -51,10 +46,13 @@ class Picarx(object):
         self.cam_pan = Servo(servo_pins[0])
         self.cam_tilt = Servo(servo_pins[1])   
         self.dir_servo_pin = Servo(servo_pins[2])
-        # get calibration values
-        self.dir_cali_val = float(self.config_flie.get("picarx_dir_servo", default_value=0))
-        self.cam_pan_cali_val = float(self.config_flie.get("picarx_cam_pan_servo", default_value=0))
-        self.cam_tilt_cali_val = float(self.config_flie.get("picarx_cam_tilt_servo", default_value=0))
+        
+        # --------- HARDCODED CALIBRATION VALUES ---------
+        # direction_servo: -7.6 | camera_pan: 4.8 | camera_tilt: 2.8
+        self.dir_cali_val = float(self.config_flie.get("picarx_dir_servo", default_value=-7.6))
+        self.cam_pan_cali_val = float(self.config_flie.get("picarx_cam_pan_servo", default_value=4.8))
+        self.cam_tilt_cali_val = float(self.config_flie.get("picarx_cam_tilt_servo", default_value=2.8))
+        
         # set servos to init angle
         self.dir_servo_pin.angle(self.dir_cali_val)
         self.cam_pan.angle(self.cam_pan_cali_val)
@@ -67,12 +65,12 @@ class Picarx(object):
         self.right_rear_pwm_pin = PWM(motor_pins[3])
         self.motor_direction_pins = [self.left_rear_dir_pin, self.right_rear_dir_pin]
         self.motor_speed_pins = [self.left_rear_pwm_pin, self.right_rear_pwm_pin]
-        # get calibration values
+        
         self.cali_dir_value = self.config_flie.get("picarx_dir_motor", default_value="[1, 1]")
         self.cali_dir_value = [int(i.strip()) for i in self.cali_dir_value.strip().strip("[]").split(",")]
         self.cali_speed_value = [0, 0]
         self.dir_current_angle = 0
-        # init pwm
+        
         for pin in self.motor_speed_pins:
             pin.period(self.PERIOD)
             pin.prescaler(self.PRESCALER)
@@ -80,26 +78,18 @@ class Picarx(object):
         # --------- grayscale module init ---------
         adc0, adc1, adc2 = [ADC(pin) for pin in grayscale_pins]
         self.grayscale = Grayscale_Module(adc0, adc1, adc2, reference=None)
-        # get reference
+        
         self.line_reference = self.config_flie.get("line_reference", default_value=str(self.DEFAULT_LINE_REF))
         self.line_reference = [float(i) for i in self.line_reference.strip().strip('[]').split(',')]
         self.cliff_reference = self.config_flie.get("cliff_reference", default_value=str(self.DEFAULT_CLIFF_REF))
         self.cliff_reference = [float(i) for i in self.cliff_reference.strip().strip('[]').split(',')]
-        # transfer reference
         self.grayscale.reference(self.line_reference)
 
         # --------- ultrasonic init ---------
-        trig, echo= ultrasonic_pins
+        trig, echo = ultrasonic_pins
         self.ultrasonic = Ultrasonic(Pin(trig), Pin(echo, mode=Pin.IN, pull=Pin.PULL_DOWN))
         
     def set_motor_speed(self, motor, speed):
-        ''' set motor speed
-        
-        param motor: motor index, 1 means left motor, 2 means right motor
-        type motor: int
-        param speed: speed
-        type speed: int      
-        '''
         speed = constrain(speed, -100, 100)
         motor -= 1
         if speed >= 0:
@@ -107,9 +97,8 @@ class Picarx(object):
         elif speed < 0:
             direction = -1 * self.cali_dir_value[motor]
         speed = abs(speed)
-        # print(f"direction: {direction}, speed: {speed}")
         if speed != 0:
-            speed = int(speed /2 ) + 50
+            speed = int(speed / 2) + 50
         speed = speed - self.cali_speed_value[motor]
         if direction < 0:
             self.motor_direction_pins[motor].high()
@@ -128,13 +117,6 @@ class Picarx(object):
             self.cali_speed_value[1] = 0
 
     def motor_direction_calibrate(self, motor, value):
-        ''' set motor direction calibration value
-        
-        param motor: motor index, 1 means left motor, 2 means right motor
-        type motor: int
-        param value: speed
-        type value: int
-        '''      
         motor -= 1
         if value == 1:
             self.cali_dir_value[motor] = 1
@@ -206,12 +188,9 @@ class Picarx(object):
                 self.set_motor_speed(2, -1*speed * power_scale)
         else:
             self.set_motor_speed(1, speed)
-            self.set_motor_speed(2, -1*speed)                  
+            self.set_motor_speed(2, -1*speed)                      
 
     def stop(self):
-        '''
-        Execute twice to make sure it stops
-        '''
         for _ in range(2):
             self.motor_speed_pins[0].pulse_width_percent(0)
             self.motor_speed_pins[1].pulse_width_percent(0)
